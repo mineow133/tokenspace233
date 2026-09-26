@@ -4,9 +4,9 @@ export type DexPair = {
   pairAddress?: string;
   baseToken?: { address: string; name: string; symbol: string };
   priceUsd?: string;
-  txns?: { h24?: { buys?: number; sells?: number } };
-  volume?: { h24?: number };
-  priceChange?: { h24?: number };
+  txns?: Record<string, { buys?: number; sells?: number }>;
+  volume?: Record<string, number>;
+  priceChange?: Record<string, number>;
   liquidity?: { usd?: number };
   fdv?: number;
   marketCap?: number;
