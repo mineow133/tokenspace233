@@ -1,0 +1,1 @@
+export default function Loading(){return <main className="app-loading"><div className="loader"><span/>Loading TokenSpace...</div></main>}
