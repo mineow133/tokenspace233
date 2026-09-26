@@ -1,117 +1,151 @@
-import {NextResponse} from "next/server";
-import {normalize,DexPair,scorePair} from "../../../lib/ranking";
+import { NextResponse } from "next/server";
+import { normalize, scorePair, type DexPair } from "../../../lib/ranking";
 
-export const dynamic="force-dynamic";
-const DEX="https://api.dexscreener.com";
-const JUP="https://api.jup.ag";
+export const dynamic = "force-dynamic";
 
-async function dex(path:string){
-  const r=await fetch(DEX+path,{headers:{accept:"application/json"},next:{revalidate:20}});
-  if(!r.ok) throw new Error("DEX Screener "+r.status);
-  return r.json();
+const DEX = "https://api.dexscreener.com";
+const JUP = "https://api.jup.ag";
+const GECKO = "https://api.geckoterminal.com/api/v2";
+
+async function getJson(base: string, path: string, cacheSeconds?: number) {
+  const response = await fetch(base + path, {
+    headers: { accept: "application/json" },
+    ...(cacheSeconds ? { next: { revalidate: cacheSeconds } } : { cache: "no-store" })
+  });
+  if (!response.ok) throw new Error("Market source " + response.status);
+  return response.json();
 }
 
-async function jup(path:string){
-  const headers:Record<string,string>={accept:"application/json"};
-  if(process.env.JUPITER_API_KEY) headers["x-api-key"]=process.env.JUPITER_API_KEY;
-  const r=await fetch(JUP+path,{headers,cache:"no-store"});
-  if(!r.ok) throw new Error("Jupiter "+r.status);
-  return r.json();
-}
-
-type Recent={
-  id:string;name?:string;symbol?:string;icon?:string;usdPrice?:number;fdv?:number;mcap?:number;liquidity?:number;
-  firstPool?:{id?:string;createdAt?:string};
-  stats24h?:{priceChange?:number;buyVolume?:number;sellVolume?:number;numBuys?:number;numSells?:number;numTraders?:number};
+type GeckoPool = {
+  attributes?: {
+    name?: string;
+    base_token_price_usd?: string;
+    fdv_usd?: string;
+    market_cap_usd?: string;
+    reserve_in_usd?: string;
+    pool_created_at?: string;
+    price_change_percentage?: Record<string, string>;
+    volume_usd?: Record<string, string>;
+    transactions?: Record<string, { buys?: number; sells?: number }>;
+  };
+  relationships?: { base_token?: { data?: { id?: string } } };
 };
 
-function recentScore(t:Recent){
-  const s=t.stats24h??{};
-  const volume=(s.buyVolume??0)+(s.sellVolume??0);
-  const tx=(s.numBuys??0)+(s.numSells??0);
-  const liq=t.liquidity??0;
-  const change=(s.priceChange??0)*100;
-  const vm=Math.min(100,Math.log10(volume+1)*12);
-  const cm=Math.max(0,Math.min(100,50+change));
-  const tm=Math.min(100,Math.log10(tx+1)*22);
-  const lm=Math.min(100,Math.log10(liq+1)*20);
-  return Math.round(vm*.3+cm*.25+tm*.2+lm*.15+10);
+function geckoToken(pool: GeckoPool) {
+  const a = pool.attributes ?? {};
+  const address = pool.relationships?.base_token?.data?.id?.replace(/^solana_/, "") || "";
+  const created = Date.parse(a.pool_created_at || "");
+  return {
+    address,
+    symbol: (a.name || "UNKNOWN").split(" / ")[0].slice(0, 18),
+    name: a.name || "Fresh Solana pool",
+    image: "",
+    pairAddress: "",
+    price: Number(a.base_token_price_usd ?? 0),
+    marketCap: Number(a.market_cap_usd ?? a.fdv_usd ?? 0),
+    liquidity: Number(a.reserve_in_usd ?? 0),
+    volume: Number(a.volume_usd?.h24 ?? 0),
+    volume5m: Number(a.volume_usd?.m5 ?? 0),
+    volume1h: Number(a.volume_usd?.h1 ?? 0),
+    change: Number(a.price_change_percentage?.h24 ?? 0),
+    priceChange5m: Number(a.price_change_percentage?.m5 ?? 0),
+    buys: a.transactions?.h24?.buys ?? 0,
+    sells: a.transactions?.h24?.sells ?? 0,
+    txns: (a.transactions?.h24?.buys ?? 0) + (a.transactions?.h24?.sells ?? 0),
+    score: 0,
+    pairUrl: "",
+    createdAt: created ? new Date(created).toISOString() : ""
+  };
 }
 
-export async function GET(){
-  try{
-    const [profiles,boosts,recent] = await Promise.allSettled([
-      dex("/token-profiles/latest/v1"),
-      dex("/token-boosts/latest/v1"),
-      jup("/tokens/v2/recent?limit=100")
+export async function GET() {
+  try {
+    const results = await Promise.allSettled([
+      getJson(DEX, "/token-profiles/latest/v1", 15),
+      getJson(DEX, "/token-boosts/latest/v1", 15),
+      getJson(DEX, "/token-boosts/top/v1", 15),
+      getJson(DEX, "/community-takeovers/latest/v1", 15),
+      getJson(JUP, "/tokens/v2/recent?limit=100"),
+      getJson(GECKO, "/networks/solana/new_pools?page=1", 10),
+      getJson(GECKO, "/networks/solana/new_pools?page=2", 10),
+      getJson(GECKO, "/networks/solana/new_pools?page=3", 10)
     ]);
 
-    const addresses=new Set<string>();
-    for(const result of [profiles,boosts]){
-      if(result.status!=="fulfilled"||!Array.isArray(result.value)) continue;
-      for(const x of result.value){
-        if(x?.chainId==="solana"&&x?.tokenAddress) addresses.add(x.tokenAddress);
+    const addresses = new Set<string>();
+
+    for (const index of [0, 1, 2, 3]) {
+      const result = results[index];
+      if (result.status !== "fulfilled" || !Array.isArray(result.value)) continue;
+      for (const row of result.value) {
+        if (row?.chainId === "solana" && row?.tokenAddress) addresses.add(row.tokenAddress);
       }
     }
 
-    const recentRows:Recent[]=recent.status==="fulfilled"&&Array.isArray(recent.value)
-      ? recent.value.filter((x:any)=>x?.id) : [];
-    for(const x of recentRows) addresses.add(x.id);
+    const recent = results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [];
+    for (const row of recent) if (row?.id) addresses.add(row.id);
 
-    const all=[...addresses].slice(0,180);
-    const pairs:DexPair[]=[];
-    for(let i=0;i<all.length;i+=30){
-      try{
-        const data=await dex("/tokens/v1/solana/"+all.slice(i,i+30).join(","));
-        if(Array.isArray(data)) pairs.push(...data);
-      }catch{}
+    const freshPools: GeckoPool[] = [];
+    for (const index of [5, 6, 7]) {
+      const result = results[index];
+      if (result.status === "fulfilled" && Array.isArray(result.value?.data)) {
+        freshPools.push(...result.value.data);
+      }
+    }
+    for (const pool of freshPools) {
+      const address = geckoToken(pool).address;
+      if (address) addresses.add(address);
     }
 
-    const best=new Map<string,DexPair>();
-    for(const p of pairs){
-      if(!p.baseToken?.address||p.chainId!=="solana") continue;
-      const old=best.get(p.baseToken.address);
-      if(!old||scorePair(p)>scorePair(old)) best.set(p.baseToken.address,p);
-    }
-
-    const dexTokens=[...best.values()]
-      .map(normalize)
-      .filter(t=>t.liquidity>=5000&&t.marketCap>=10000)
-      .sort((a,b)=>b.score-a.score)
-      .slice(0,100);
-
-    const newTokens=recentRows.map(t=>{
-      const p=best.get(t.id);
-      const n=p?normalize(p):{
-        address:t.id,
-        symbol:t.symbol??"UNKNOWN",
-        name:t.name??"Unknown token",
-        image:t.icon??"",
-        pairAddress:t.firstPool?.id??"",
-        price:Number(t.usdPrice??0),
-        marketCap:t.mcap??t.fdv??0,
-        liquidity:t.liquidity??0,
-        volume:(t.stats24h?.buyVolume??0)+(t.stats24h?.sellVolume??0),
-        change:(t.stats24h?.priceChange??0)*100,
-        txns:(t.stats24h?.numBuys??0)+(t.stats24h?.numSells??0),
-        score:recentScore(t),
-        pairUrl:""
-      };
-      return {...n,createdAt:t.firstPool?.createdAt??""};
-    })
-    .filter(t=>t.liquidity>=1000&&t.marketCap>=5000)
-    .sort((a,b)=>Date.parse(b.createdAt||"0")-Date.parse(a.createdAt||"0"))
-    .slice(0,100);
-
-    const merged=new Map<string,any>();
-    for(const t of dexTokens) merged.set(t.address,t);
-    for(const t of newTokens) if(!merged.has(t.address)) merged.set(t.address,t);
-
-    return NextResponse.json(
-      {tokens:[...merged.values()].slice(0,100),newTokens,source:"dexscreener+jupiter",updatedAt:Date.now()},
-      {headers:{"Cache-Control":"s-maxage=20, stale-while-revalidate=60"}}
+    const unique = [...addresses].slice(0, 360);
+    const chunks = Array.from({ length: Math.ceil(unique.length / 30) }, (_, index) =>
+      getJson(DEX, "/tokens/v1/solana/" + unique.slice(index * 30, (index + 1) * 30).join(","), 15).catch(() => [])
     );
-  }catch(e){
-    return NextResponse.json({tokens:[],newTokens:[],error:e instanceof Error?e.message:"Unknown error"},{status:502});
+    const pairResults = await Promise.all(chunks);
+    const pairs: DexPair[] = pairResults.flat();
+
+    const best = new Map<string, DexPair>();
+    for (const pair of pairs) {
+      if (pair.chainId !== "solana" || !pair.baseToken?.address) continue;
+      const previous = best.get(pair.baseToken.address);
+      if (!previous || (pair.liquidity?.usd ?? 0) > (previous.liquidity?.usd ?? 0)) {
+        best.set(pair.baseToken.address, pair);
+      }
+    }
+
+    const tokens = [...best.values()]
+      .map(normalize)
+      .filter((token) => token.liquidity >= 800 && token.marketCap >= 2500)
+      .sort((a, b) => b.score - a.score);
+
+    const fresh = freshPools
+      .map(geckoToken)
+      .filter((token) => token.address && token.liquidity >= 500 && token.marketCap >= 1500)
+      .map((token) => {
+        const pair = best.get(token.address);
+        if (!pair) return token;
+        return { ...normalize(pair), createdAt: pair.pairCreatedAt ? new Date(pair.pairCreatedAt).toISOString() : token.createdAt };
+      })
+      .sort((a, b) => Date.parse(b.createdAt || "0") - Date.parse(a.createdAt || "0"));
+
+    const merged = new Map<string, any>();
+    for (const token of tokens) merged.set(token.address, token);
+    for (const token of fresh) if (!merged.has(token.address)) merged.set(token.address, token);
+
+    const all = [...merged.values()];
+    return NextResponse.json(
+      {
+        tokens: all.slice(0, 300),
+        newTokens: fresh.slice(0, 180),
+        candidates: unique.length,
+        sources: ["DEX Screener", "Jupiter", "GeckoTerminal"],
+        updatedAt: Date.now()
+      },
+      { headers: { "Cache-Control": "s-maxage=15, stale-while-revalidate=30" } }
+    );
+  } catch (error) {
+    return NextResponse.json(
+      { tokens: [], newTokens: [], candidates: 0, error: error instanceof Error ? error.message : "Market unavailable" },
+      { status: 502 }
+    );
   }
 }
