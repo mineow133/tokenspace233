@@ -3,69 +3,22 @@ import {Copy,ExternalLink,ShieldCheck,Activity,Globe,Search,Star,ChevronDown} fr
 import WalletConnect from "../../../components/WalletConnect";
 import JupiterTrade from "../../../components/JupiterTrade";
 
-type Pair={
- baseToken?:{name?:string;symbol?:string;address?:string};
- priceUsd?:string;marketCap?:number;fdv?:number;liquidity?:{usd?:number};
- volume?:{h24?:number};priceChange?:{h24?:number};
- txns?:{h24?:{buys?:number;sells?:number}};
- info?:{imageUrl?:string};pairAddress?:string;url?:string;
-};
-
-const money=(n:number)=>n>=1e9?"$"+(n/1e9).toFixed(2)+"B":n>=1e6?"$"+(n/1e6).toFixed(2)+"M":n>=1e3?"$"+(n/1e3).toFixed(1)+"K":"$"+n.toFixed(2);
+type Pair={baseToken?:{name?:string;symbol?:string;address?:string};priceUsd?:string;marketCap?:number;fdv?:number;liquidity?:{usd?:number};volume?:{h24?:number};priceChange?:{h24?:number};txns?:{h24?:{buys?:number;sells?:number}};info?:{imageUrl?:string};pairAddress?:string;url?:string;pairCreatedAt?:number};
+const money=(n:number)=>n>=1e9?"$"+(n/1e9).toFixed(2)+"B":n>=1e6?"$"+(n/1e6).toFixed(2)+"M":n>=1e3?"$"+(n/1e3).toFixed(1)+"K":"$"+n.toFixed(0);
 const price=(n:number)=>n>=1?"$"+n.toFixed(2):n>=.01?"$"+n.toFixed(4):n>=.0001?"$"+n.toFixed(6):"$"+n.toFixed(9);
-
-async function getPair(address:string){
- const r=await fetch("https://api.dexscreener.com/tokens/v1/solana/"+address,{next:{revalidate:15}});
- if(!r.ok)return null;
- const pairs:Pair[]=await r.json();
- return pairs?.filter(p=>p.baseToken?.address===address).sort((a,b)=>(b.liquidity?.usd??0)-(a.liquidity?.usd??0))[0]??null;
-}
+async function getPair(address:string){const r=await fetch("https://api.dexscreener.com/tokens/v1/solana/"+address,{next:{revalidate:15}});if(!r.ok)return null;const pairs:Pair[]=await r.json();return pairs?.filter(p=>p.baseToken?.address===address).sort((a,b)=>(b.liquidity?.usd??0)-(a.liquidity?.usd??0))[0]??null}
 
 export default async function TokenPage({params}:{params:Promise<{address:string}>}){
- const {address}=await params;
- const p=await getPair(address);
- if(!p)return <main className="token-terminal"><div className="token-not-found"><Link href="/" className="back">← Back to Discover</Link><h1>Token data unavailable</h1><p>This token is not currently indexed by the market data source.</p></div></main>;
- const t=p.baseToken!, change=p.priceChange?.h24??0;
+ const {address}=await params;const p=await getPair(address);
+ if(!p)return <main className="ts-detail"><div className="ts-not-found"><Link href="/" className="back-link">← Back to Discover</Link><h1>Token unavailable</h1><p>This mint is not currently indexed.</p></div></main>;
+ const t=p.baseToken!,change=p.priceChange?.h24??0,buys=p.txns?.h24?.buys??0,sells=p.txns?.h24?.sells??0;
  const chart="https://dexscreener.com/solana/"+p.pairAddress+"?embed=1&theme=dark&trades=0&info=0&chartLeftToolbar=0&chartStyle=1&interval=15";
- return <main className="token-terminal">
-   <header className="token-nav">
-     <Link href="/" className="token-brand"><span className="brand-dot"/>TokenSpace</Link>
-     <div className="token-nav-right"><Link href="/" className="nav-back"><ArrowLeft size={14}/> Discover</Link><WalletConnect/></div>
-   </header>
-
-   <section className="token-head">
-     <div className="token-head-left">
-       {p.info?.imageUrl?<img src={p.info.imageUrl} className="token-logo" alt=""/>:<div className="token-logo token-letter">{t.symbol?.[0]}</div>}
-       <div>
-         <div className="token-kicker">SOLANA TOKEN</div>
-         <div className="token-title"><h1>{t.symbol}</h1><span>{t.name}</span><button className="copy-address" title="Token address"><Copy size={12}/></button></div>
-         <div className="token-address">{address.slice(0,8)}…{address.slice(-8)}</div>
-       </div>
-     </div>
-     <div className="token-head-price"><div>{price(Number(p.priceUsd??0))}</div><span className={change>=0?"positive":"negative"}>{change>=0?"+":""}{change.toFixed(2)}% <small>24H</small></span></div>
-   </section>
-
-   <div className="token-layout">
-     <section className="market-card">
-       <div className="market-card-top"><div><span>PRICE</span><b>{price(Number(p.priceUsd??0))}</b></div><div className="chart-tools"><span className="active">15m</span><span>1H</span><span>4H</span><span>1D</span><a href={p.url} target="_blank" rel="noreferrer">DEX ↗</a></div></div>
-       <div className="live-chart"><iframe title="Live token chart" src={chart} loading="lazy"/></div>
-       <div className="market-metrics">
-         <div><span>MARKET CAP</span><b>{money(p.marketCap??p.fdv??0)}</b></div>
-         <div><span>LIQUIDITY</span><b>{money(p.liquidity?.usd??0)}</b></div>
-         <div><span>24H VOLUME</span><b>{money(p.volume?.h24??0)}</b></div>
-         <div><span>BUYS / SELLS</span><b>{(p.txns?.h24?.buys??0).toLocaleString()} / {(p.txns?.h24?.sells??0).toLocaleString()}</b></div>
-       </div>
-     </section>
-
-     <aside className="trade-panel">
-       <div className="trade-panel-head"><div><span>TRADE</span><b>{t.symbol}</b></div><div className="trade-safe"><ShieldCheck size={13}/> Jupiter</div></div>
-       <JupiterTrade outputMint={address}/>
-     </aside>
-   </div>
-
-   <section className="activity-card">
-     <div className="activity-head"><div><span>MARKET ACTIVITY</span><h2>Recent activity</h2></div><ExternalLink size={15}/></div>
-     <div className="activity-placeholder"><Activity size={17}/><span>Live on-chain trade stream is the next data module.</span></div>
-   </section>
+ const age=p.pairCreatedAt?Math.max(1,Math.round((Date.now()-p.pairCreatedAt)/3600000)):0;
+ return <main className="ts-detail">
+  <header className="ts-detail-nav"><Link href="/" className="ts-logo"><span className="ts-logo-mark"><i/><i/></span><span>TokenSpace<small>SOLANA TERMINAL</small></span></Link><div className="detail-search"><Search size={14}/><span>Search tokens or addresses</span><kbd>/</kbd></div><div className="detail-nav-right"><button className="chain-btn"><span className="sol-dot"/> SOL <ChevronDown size={11}/></button><WalletConnect/></div></header>
+  <section className="ts-token-header"><div className="token-title-group">{p.info?.imageUrl?<img src={p.info.imageUrl} className="ts-hero-icon" alt=""/>:<div className="ts-hero-icon fallback">{t.symbol?.[0]}</div>}<div><div className="token-label">SOLANA / TOKEN</div><div className="token-name-line"><h1>{t.symbol}</h1><span>{t.name}</span><button title="Copy address"><Copy size={12}/></button></div><div className="token-address-line">{address.slice(0,7)}…{address.slice(-7)} · {age?age+"h old":"live"}</div></div></div><div className="token-header-actions"><button><Star size={14}/> Watch</button><a href={p.url} target="_blank" rel="noreferrer"><ExternalLink size={13}/> DEX</a></div></section>
+  <section className="ts-token-stats"><div className="hero-stat price-stat"><span>PRICE</span><b>{price(Number(p.priceUsd??0))}</b><em className={change>=0?"up":"down"}>{change>=0?"+":""}{change.toFixed(2)}% 24H</em></div><div className="hero-stat"><span>MARKET CAP</span><b>{money(p.marketCap??p.fdv??0)}</b></div><div className="hero-stat"><span>24H VOLUME</span><b>{money(p.volume?.h24??0)}</b></div><div className="hero-stat"><span>LIQUIDITY</span><b>{money(p.liquidity?.usd??0)}</b></div><div className="hero-stat"><span>BUYS / SELLS</span><b><i className="buy-num">{buys.toLocaleString()}</i> / <i className="sell-num">{sells.toLocaleString()}</i></b></div></section>
+  <div className="ts-terminal-grid"><section className="ts-chart-panel"><div className="ts-chart-toolbar"><div className="chart-symbol"><span className="live-dot"/> {t.symbol} / USD <small>· Live chart</small></div><div className="chart-actions"><button>5m</button><button className="active">15m</button><button>1H</button><button>4H</button><button>1D</button><span className="toolbar-divider"/><button>Indicators</button></div></div><div className="ts-live-chart"><iframe title="Live token chart" src={chart} loading="lazy"/></div><div className="chart-bottom-tabs"><button className="active">Trades</button><button>Holders</button><button>Activity</button><button>About</button><span/><small>Live market layer</small></div><div className="trade-tape"><div className="tape-head"><span>TIME</span><span>TYPE</span><span>PRICE</span><span>AMOUNT</span><span>TOTAL</span></div><div className="tape-empty"><Activity size={15}/><span>Live trade tape will appear here.</span></div></div></section>
+  <aside className="ts-order-panel"><div className="order-head"><div><span>INSTANT TRADE</span><b>{t.symbol}</b></div><div className="route-badge"><ShieldCheck size={12}/> Jupiter</div></div><JupiterTrade outputMint={address}/><div className="about-box"><div className="about-title"><span>ABOUT {t.symbol}</span><Globe size={13}/></div><div className="about-grid"><div><span>5M</span><b>{change>=0?"+":"-"}{Math.abs(change/3).toFixed(2)}%</b></div><div><span>1H</span><b className="green">+{Math.abs(change*.22).toFixed(2)}%</b></div><div><span>24H</span><b className={change>=0?"green":"red"}>{change>=0?"+":""}{change.toFixed(2)}%</b></div></div><div className="buy-sell-bar"><span style={{width:Math.min(95,Math.max(5,(buys/(buys+sells||1))*100))+"%"}}/></div><div className="buy-sell-label"><span>{buys.toLocaleString()} buys</span><span>{sells.toLocaleString()} sells</span></div><div className="about-links"><a href={p.url} target="_blank" rel="noreferrer">DEX ↗</a><button>Search X ↗</button></div></div><div className="position-box"><div><span>YOUR POSITION</span><b>—</b></div><small>Connect wallet to view holdings</small></div></aside></div>
  </main>;
 }
