@@ -13,13 +13,13 @@ export default function JupiterTrade({outputMint}:{outputMint:string}){
   try{
    const input=side==="buy"?SOL:outputMint,output=side==="buy"?outputMint:SOL;
    const raw=side==="buy"?Math.round(Number(amount)*LAMPORTS):Math.round(balance*Number(amount)/100);
-   if(!Number.isFinite(raw)||raw<=0)throw new Error("Enter a valid amount.");
+   if(!Number.isSafeInteger(raw)||raw<=0)throw new Error("Enter a valid amount.");
    const r=await fetch(`/api/jupiter/order?inputMint=${input}&outputMint=${output}&amount=${raw}&taker=${publicKey.toBase58()}`);
    const order=await r.json();if(!r.ok)throw new Error(order.error||"Jupiter order failed");
    if(!order.transaction)throw new Error("Jupiter did not return a transaction.");
    const tx=VersionedTransaction.deserialize(Buffer.from(order.transaction,"base64"));
    const signed=await signTransaction(tx);setStatus("Submitting transaction...");
-   const connection=new Connection("https://api.mainnet-beta.solana.com","confirmed");
+   const connection=new Connection(process.env.NEXT_PUBLIC_SOLANA_RPC_URL||"https://api.mainnet-beta.solana.com","confirmed");
    const sig=await connection.sendRawTransaction(signed.serialize(),{skipPreflight:false});
    setStatus("Confirming transaction...");
    await connection.confirmTransaction(sig,"confirmed");
