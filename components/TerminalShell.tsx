@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
-  BarChart3,
   Bell,
+  ChartNoAxesCombined,
   Compass,
   Crown,
+  Menu,
+  Search,
   Settings2,
-  Sparkles,
   Star,
   WalletCards,
   Zap
@@ -17,9 +18,9 @@ import {
 import WalletConnect from "./WalletConnect";
 
 const nav = [
-  { href: "/", label: "Discover", icon: Compass },
-  { href: "/markets", label: "Markets", icon: BarChart3 },
-  { href: "/alpha", label: "Alpha Radar", icon: Sparkles },
+  { href: "/", label: "Explore", icon: Compass },
+  { href: "/markets", label: "New Pairs", icon: ChartNoAxesCombined },
+  { href: "/alpha", label: "Alpha", icon: Zap },
   { href: "/watchlist", label: "Watchlist", icon: Star },
   { href: "/portfolio", label: "Portfolio", icon: WalletCards },
   { href: "/activity", label: "Activity", icon: Activity }
@@ -29,90 +30,77 @@ export default function TerminalShell({ children }: { children: React.ReactNode 
   const pathname = usePathname();
 
   return (
-    <div className="ts-app">
-      <aside className="ts-sidebar">
-        <Link href="/" className="ts-brand">
-          <span className="ts-brand-orb">
-            <span />
-            <span />
-            <span />
-          </span>
-          <span>
+    <div className="ds-shell">
+      <header className="ds-header">
+        <div className="ds-header-left">
+          <Link href="/" className="ds-logo">
+            <span className="ds-logo-mark"><span /><span /><span /></span>
             <strong>TokenSpace</strong>
-            <small>SOLANA TRADING TERMINAL</small>
-          </span>
-        </Link>
+          </Link>
 
-        <div className="ts-nav-group">
-          <div className="ts-nav-caption">WORKSPACE</div>
+          <div className="ds-global-search">
+            <Search size={16} />
+            <span>Search token, pair or address</span>
+            <kbd>/</kbd>
+          </div>
+        </div>
+
+        <nav className="ds-header-nav">
+          <Link href="/watchlist">Watchlist</Link>
+          <Link href="/activity">Alerts</Link>
+          <Link href="/markets">New Pairs</Link>
+          <Link href="/markets">Gainers</Link>
+          <Link href="/premium" className="ds-premium-link"><Crown size={13} /> Premium</Link>
+        </nav>
+
+        <div className="ds-header-actions">
+          <button className="ds-icon-btn" type="button" aria-label="Notifications"><Bell size={16} /></button>
+          <button className="ds-icon-btn" type="button" aria-label="Settings"><Settings2 size={16} /></button>
+          <div className="ds-chain-pill"><span className="ds-chain-dot" /> Solana</div>
+          <WalletConnect />
+          <button className="ds-icon-btn ds-mobile-menu" type="button" aria-label="Menu"><Menu size={17} /></button>
+        </div>
+      </header>
+
+      <div className="ds-layout">
+        <aside className="ds-rail">
+          <div className="ds-rail-label">TOOLS</div>
           {nav.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/" && pathname.startsWith(href));
             return (
-              <Link href={href} className={active ? "ts-nav-link active" : "ts-nav-link"} key={href}>
+              <Link href={href} className={active ? "ds-rail-item active" : "ds-rail-item"} key={href}>
                 <Icon size={17} strokeWidth={1.9} />
                 <span>{label}</span>
               </Link>
             );
           })}
-        </div>
 
-        <div className="ts-nav-group ts-edge-group">
-          <div className="ts-nav-caption">EDGE</div>
-          <Link
-            href="/premium"
-            className={pathname.startsWith("/premium") ? "ts-nav-link premium-link active" : "ts-nav-link premium-link"}
-          >
-            <Crown size={17} strokeWidth={1.9} />
-            <span>Premium Alpha</span>
-          </Link>
-        </div>
+          <div className="ds-rail-spacer" />
 
-        <div className="ts-side-card">
-          <div className="ts-side-card-head">
-            <span className="live-dot" />
-            <span>MAINNET LIVE</span>
+          <div className="ds-rail-status">
+            <span className="ds-status-line"><i /> MAINNET</span>
+            <strong>Solana</strong>
+            <small>Live market data</small>
           </div>
-          <strong>Solana / Jupiter</strong>
-          <p>Market discovery refreshes every 15s. Trades route through Jupiter and settle on-chain.</p>
-          <div className="ts-side-mini">
-            <span><Zap size={13} /> Jupiter</span>
-            <span><Sparkles size={13} /> DEX data</span>
-          </div>
-        </div>
-      </aside>
+        </aside>
 
-      <div className="ts-main">
-        <header className="ts-topbar">
-          <div className="ts-top-left">
-            <Link href="/" className="ts-mobile-brand">TokenSpace</Link>
-            <div className="ts-breadcrumb-wrap">
-              <span className="ts-breadcrumb">SOLANA / TERMINAL</span>
-              <span className="ts-top-status"><span className="live-dot" /> LIVE</span>
-            </div>
+        <main className="ds-main">
+          <div className="ds-chain-strip">
+            <span className="ds-chain-strip-title">CHAIN</span>
+            <Link className="active" href="/">Solana</Link>
+            <span>DEX</span>
+            <b>All DEXs</b>
+            <span className="ds-strip-grow" />
+            <span className="ds-strip-note"><i /> Market data updates automatically</span>
           </div>
-
-          <div className="ts-top-actions">
-            <div className="ts-network-pill"><span className="ts-network-dot" /> Solana Mainnet</div>
-            <button className="icon-button" type="button" aria-label="Notifications"><Bell size={17} /></button>
-            <button className="icon-button" type="button" aria-label="Settings"><Settings2 size={17} /></button>
-            <WalletConnect />
-          </div>
-        </header>
-
-        <div className="ts-content">
-          {children}
-        </div>
+          <div className="ds-content">{children}</div>
+        </main>
       </div>
 
-      <nav className="ts-mobile-nav">
-        {nav.slice(0, 4).map(({ href, label, icon: Icon }) => {
+      <nav className="ds-mobile-nav">
+        {nav.slice(0, 5).map(({ href, label, icon: Icon }) => {
           const active = pathname === href || (href !== "/" && pathname.startsWith(href));
-          return (
-            <Link href={href} className={active ? "active" : ""} key={href}>
-              <Icon size={18} />
-              <span>{label === "Alpha Radar" ? "Alpha" : label}</span>
-            </Link>
-          );
+          return <Link href={href} className={active ? "active" : ""} key={href}><Icon size={17} /><span>{label}</span></Link>;
         })}
       </nav>
     </div>
