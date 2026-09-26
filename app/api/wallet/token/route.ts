@@ -1,0 +1,4 @@
+import {NextResponse} from "next/server";
+import {Connection,PublicKey} from "@solana/web3.js";
+export const dynamic="force-dynamic";
+export async function GET(req:Request){const {searchParams}=new URL(req.url);const owner=searchParams.get("owner"),mint=searchParams.get("mint");if(!owner||!mint)return NextResponse.json({error:"Missing owner or mint"},{status:400});try{const c=new Connection("https://api.mainnet-beta.solana.com","confirmed");const rows=await c.getParsedTokenAccountsByOwner(new PublicKey(owner),{mint:new PublicKey(mint)});const amount=rows.value.reduce((s,x)=>s+Number(x.account.data.parsed.info.tokenAmount.amount),0);return NextResponse.json({amount})}catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Balance lookup failed"},{status:500})}}
