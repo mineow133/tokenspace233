@@ -1,2 +1,5 @@
 "use client";
-export default function Error({reset}:{error:Error&{digest?:string};reset:()=>void}){return <main className="app-error"><div><small>TOKENSPACE</small><h1>Something went wrong.</h1><p>{error.message||"The page could not be loaded."}</p><button onClick={()=>reset()}>Try again</button></div></main>}
+
+export default function Error({error,reset}:{error:Error&{digest?:string};reset:()=>void}){
+  return <main className="app-error"><div><small>TOKENSPACE</small><h1>Something went wrong.</h1><p>{error.message||"The page could not be loaded."}</p><button onClick={()=>reset()}>Try again</button></div></main>
+}
