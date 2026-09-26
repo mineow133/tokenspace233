@@ -1,5 +1,5 @@
 import Link from "next/link";
-import {ArrowLeft,Copy,ExternalLink,ShieldCheck,Activity} from "lucide-react";
+import {Copy,ExternalLink,ShieldCheck,Activity,Globe,Search,Star,ChevronDown} from "lucide-react";
 import WalletConnect from "../../../components/WalletConnect";
 import JupiterTrade from "../../../components/JupiterTrade";
 
